@@ -292,6 +292,37 @@ def composition_score(body: CompositionBody):
     }
 
 
+# ── International ────────────────────────────────────────────────────────────
+
+@app.get(f"{PREFIX}/international")
+def international(season: str = DEFAULT_SEASON):
+    df = get_df(season)
+    if df.empty:
+        raise HTTPException(404, "Season not found")
+    if "rating_intl" not in df.columns:
+        return []
+    intl = df[df["rating_intl"].notna()].copy()
+    intl = intl.sort_values("rating_intl", ascending=False)
+    result = []
+    for _, row in intl.iterrows():
+        rating = safe_float(row.get("rating")) or 40.0
+        rating_intl = safe_float(row.get("rating_intl"))
+        result.append({
+            "lnr_slug":       safe_str(row.get("lnr_slug")),
+            "name":           safe_str(row.get("name")),
+            "team":           safe_str(row.get("team")),
+            "position_group": safe_str(row.get("position_group")),
+            "rating":         round(rating, 1),
+            "tier":           rating_to_tier(rating),
+            "rating_intl":    round(rating_intl, 1) if rating_intl else None,
+            "tier_intl":      rating_to_tier(rating_intl),
+            "team_intl":      safe_str(row.get("team_intl")),
+            "matches_intl":   safe_int(row.get("matches_intl")),
+            "nationality":    safe_str(row.get("nationality")),
+        })
+    return result
+
+
 # ── Predict ───────────────────────────────────────────────────────────────────
 
 class PredictBody(BaseModel):

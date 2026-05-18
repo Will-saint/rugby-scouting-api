@@ -11,6 +11,7 @@ from data_loader import (
     get_player_badges,
 )
 from predictor import predict_match
+from ai_service import generate_commentary, generate_scout_summary
 
 app = FastAPI(title="Rugby Analytics API", version="1.0.0")
 
@@ -125,6 +126,78 @@ def player_detail(lnr_slug: str, season: str = DEFAULT_SEASON):
     row = match.iloc[0]
     history = player_history(lnr_slug)
     return row_to_detail(row, history)
+
+
+@app.get(f"{PREFIX}/players/{{lnr_slug}}/commentary")
+def player_commentary(lnr_slug: str, season: str = DEFAULT_SEASON):
+    """Generate a 3-sentence AI analysis of a player's current season."""
+    df = get_df(season)
+    if df.empty:
+        raise HTTPException(404, "Season not found")
+    match = df[df["lnr_slug"] == lnr_slug]
+    if match.empty:
+        raise HTTPException(404, f"Player '{lnr_slug}' not found")
+    row = match.iloc[0]
+    player_data = row_to_detail(row, [])
+    text = generate_commentary(player_data, season)
+    if text is None:
+        return {"commentary": None, "available": False}
+    return {"commentary": text, "available": True}
+
+
+# ── Scout IA ──────────────────────────────────────────────────────────────────
+
+POSITION_LABELS_FR = {
+    "FRONT_ROW": "Première ligne", "LOCK": "Deuxième ligne",
+    "BACK_ROW": "Troisième ligne", "SCRUM_HALF": "Demi de mêlée",
+    "FLY_HALF": "Demi d'ouverture", "WINGER": "Ailier",
+    "CENTRE": "Centre", "FULLBACK": "Arrière",
+}
+
+@app.get(f"{PREFIX}/scout")
+def scout(
+    season: str = DEFAULT_SEASON,
+    position: Optional[str] = None,
+    min_rating: float = 60.0,
+    max_rating: float = 99.0,
+    exclude_team: Optional[str] = None,
+    limit: int = Query(10, le=30),
+    with_ai: bool = True,
+):
+    """Find best players matching scouting criteria + optional AI summary."""
+    df = get_df(season)
+    if df.empty:
+        raise HTTPException(404, "Season not found")
+
+    mask = (df["rating"] >= min_rating) & (df["rating"] <= max_rating)
+    if position and position != "ALL":
+        mask &= df["position_group"] == position
+    if exclude_team:
+        mask &= df["team"] != exclude_team
+
+    results = df[mask].sort_values("rating", ascending=False).head(limit)
+    players = [row_to_summary(r) for _, r in results.iterrows()]
+
+    ai_summary = None
+    if with_ai and players:
+        criteria = {
+            "position": position or "tous postes",
+            "position_label": POSITION_LABELS_FR.get(position or "", position or "tous postes"),
+            "min_rating": round(min_rating, 1),
+            "max_rating": round(max_rating, 1),
+        }
+        ai_summary = generate_scout_summary(players, criteria)
+
+    return {
+        "players": players,
+        "total": len(players),
+        "criteria": {
+            "position": position, "min_rating": min_rating,
+            "max_rating": max_rating, "exclude_team": exclude_team, "season": season,
+        },
+        "ai_summary": ai_summary,
+        "ai_available": ai_summary is not None,
+    }
 
 
 # ── Teams ─────────────────────────────────────────────────────────────────────

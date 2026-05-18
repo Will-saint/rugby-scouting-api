@@ -1,0 +1,44 @@
+{
+  "individual_awards": [
+    {
+      "lnr_slug": "antoine-dupont",
+      "awards": [
+        {"id": "wr_poty_15s", "label": "World Rugby POTY", "year": 2021, "icon": "trophy", "color": "gold"},
+        {"id": "wr_poty_7s", "label": "World Rugby 7s POTY", "year": 2024, "icon": "lightning", "color": "gold"},
+        {"id": "six_nations_potc", "label": "6N POTC", "year": 2022, "icon": "star", "color": "blue"},
+        {"id": "six_nations_potc", "label": "6N POTC", "year": 2023, "icon": "star", "color": "blue"},
+        {"id": "lnr_best_player", "label": "Meilleur joueur Top 14", "year": 2024, "icon": "medal", "color": "green"}
+      ]
+    }
+  ],
+  "club_championships": {
+    "Toulouse": {
+      "bouclier": ["2022-2023", "2023-2024", "2024-2025"],
+      "champions_cup": ["2023-2024"]
+    },
+    "Stade Toulousain": {
+      "bouclier": ["2022-2023", "2023-2024", "2024-2025"],
+      "champions_cup": ["2023-2024"]
+    },
+    "La Rochelle": {
+      "champions_cup": ["2022-2023"]
+    },
+    "Bordeaux-Bègles": {
+      "champions_cup": ["2024-2025"]
+    },
+    "Bordeaux": {
+      "champions_cup": ["2024-2025"]
+    },
+    "Montpellier": {
+      "bouclier": ["2021-2022"]
+    }
+  },
+  "badge_definitions": {
+    "wr_poty_15s":      {"label": "World Rugby POTY", "short": "POTY", "icon": "trophy", "color": "#d4af37"},
+    "wr_poty_7s":       {"label": "World Rugby 7s POTY", "short": "7s POTY", "icon": "zap", "color": "#d4af37"},
+    "six_nations_potc": {"label": "6N Player of Champ.", "short": "6N POTC", "icon": "star", "color": "#003380"},
+    "lnr_best_player":  {"label": "Meilleur joueur Top 14", "short": "MVP Top14", "icon": "award", "color": "#1a3a2e"},
+    "bouclier":         {"label": "Bouclier de Brennus", "short": "Bouclier", "icon": "shield", "color": "#b94f3a"},
+    "champions_cup":    {"label": "Champions Cup", "short": "CC", "icon": "cup", "color": "#7c3aed"}
+  }
+}

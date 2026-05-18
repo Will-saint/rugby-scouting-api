@@ -1,8 +1,10 @@
 """FastAPI — Rugby Analytics Dashboard API."""
+import io
 import os
 from typing import Optional
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from data_loader import (
@@ -314,6 +316,52 @@ def leaderboard(
             "badges":           get_player_badges(lnr_slug, team, season_val),
         })
     return result
+
+
+@app.get(f"{PREFIX}/leaderboard/export")
+def leaderboard_export(
+    season: str = DEFAULT_SEASON,
+    position: Optional[str] = None,
+    team: Optional[str] = None,
+):
+    """Export leaderboard as CSV file."""
+    df = get_df(season)
+    if df.empty:
+        raise HTTPException(404, "Season not found")
+
+    if position and position != "ALL":
+        df = df[df["position_group"] == position]
+    if team and team != "ALL":
+        df = df[df["team"] == team]
+
+    df = df.sort_values("rating", ascending=False).reset_index(drop=True)
+    df.insert(0, "rank", range(1, len(df) + 1))
+
+    export_cols = [
+        "rank", "name", "team", "position_group", "position_label",
+        "rating", "tier", "age", "nationality",
+        "tackles_per80", "offloads_per80", "line_breaks_per80",
+        "turnovers_won_per80", "tries_per80", "kick_points_per80",
+        "rating_intl", "team_intl", "matches_intl",
+        "minutes_total", "matches_played", "season",
+    ]
+    cols = [c for c in export_cols if c in df.columns]
+    csv_buf = io.StringIO()
+    df[cols].to_csv(csv_buf, index=False)
+    csv_buf.seek(0)
+
+    filename = f"top14_{season}_ratings"
+    if position and position != "ALL":
+        filename += f"_{position.lower()}"
+    if team and team != "ALL":
+        filename += f"_{team.lower().replace(' ', '_')}"
+    filename += ".csv"
+
+    return StreamingResponse(
+        iter([csv_buf.read()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── Composition XV ───────────────────────────────────────────────────────────

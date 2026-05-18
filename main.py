@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 from data_loader import (
     get_df, get_seasons, row_to_summary, row_to_detail,
-    rating_to_tier, safe_float, safe_int, safe_str, DEFAULT_SEASON, AVAILABLE_SEASONS
+    rating_to_tier, safe_float, safe_int, safe_str, DEFAULT_SEASON, AVAILABLE_SEASONS,
+    get_player_badges,
 )
 from predictor import predict_match
 
@@ -222,11 +223,14 @@ def leaderboard(
     result = []
     for i, (_, row) in enumerate(df.iterrows()):
         rating = safe_float(row.get("rating")) or 40.0
+        lnr_slug = safe_str(row.get("lnr_slug")) or ""
+        team = safe_str(row.get("team")) or ""
+        season_val = safe_str(row.get("season")) or season
         result.append({
             "rank":             i + 1,
-            "lnr_slug":         safe_str(row.get("lnr_slug")),
+            "lnr_slug":         lnr_slug,
             "name":             safe_str(row.get("name")),
-            "team":             safe_str(row.get("team")),
+            "team":             team,
             "position_group":   safe_str(row.get("position_group")),
             "rating":           round(rating, 1),
             "tier":             rating_to_tier(rating),
@@ -234,6 +238,7 @@ def leaderboard(
             "nationality":      safe_str(row.get("nationality")),
             "form_trend":       safe_str(row.get("form_trend")) or "→",
             "confidence_badge": safe_str(row.get("confidence_badge")) or "Basse",
+            "badges":           get_player_badges(lnr_slug, team, season_val),
         })
     return result
 

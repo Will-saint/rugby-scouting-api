@@ -2,10 +2,13 @@
 import io
 import os
 from typing import Optional
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from data_loader import (
     get_df, get_seasons, row_to_summary, row_to_detail,
@@ -15,7 +18,10 @@ from data_loader import (
 from predictor import predict_match
 from ai_service import generate_commentary, generate_scout_summary
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
 app = FastAPI(title="Rugby Analytics API", version="1.0.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _ORIGINS = [
     "http://localhost:3000",
@@ -131,7 +137,8 @@ def player_detail(lnr_slug: str, season: str = DEFAULT_SEASON):
 
 
 @app.get(f"{PREFIX}/players/{{lnr_slug}}/commentary")
-def player_commentary(lnr_slug: str, season: str = DEFAULT_SEASON):
+@limiter.limit("10/minute")
+def player_commentary(request: Request, lnr_slug: str, season: str = DEFAULT_SEASON):
     """Generate a 3-sentence AI analysis of a player's current season."""
     df = get_df(season)
     if df.empty:
@@ -157,7 +164,9 @@ POSITION_LABELS_FR = {
 }
 
 @app.get(f"{PREFIX}/scout")
+@limiter.limit("20/minute")
 def scout(
+    request: Request,
     season: str = DEFAULT_SEASON,
     position: Optional[str] = None,
     min_rating: float = 60.0,
@@ -319,7 +328,9 @@ def leaderboard(
 
 
 @app.get(f"{PREFIX}/leaderboard/export")
+@limiter.limit("30/hour")
 def leaderboard_export(
+    request: Request,
     season: str = DEFAULT_SEASON,
     position: Optional[str] = None,
     team: Optional[str] = None,

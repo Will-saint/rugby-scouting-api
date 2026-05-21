@@ -2,6 +2,7 @@
 import json
 import os
 import time
+from collections import defaultdict
 from pathlib import Path
 from functools import lru_cache
 from typing import Optional
@@ -17,6 +18,112 @@ SEASONS_DIR = _LOCAL_DATA if _LOCAL_DATA.exists() else _APP1_DATA
 DATA_DIR    = SEASONS_DIR.parent
 AVAILABLE_SEASONS = ["2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"]
 DEFAULT_SEASON = "2025-2026"
+
+
+# ── LNR Standings ─────────────────────────────────────────────────────────────
+
+# Canonical name mapping: LNR match history name → players_scored.csv name
+_TEAM_NAME_MAP = {
+    "Stade Toulousain": "Toulouse",
+    "Section Paloise": "Pau",
+    "Montpellier Hérault Rugby": "Montpellier",
+    "Montpellier Hérault Rugby": "Montpellier",
+    "Racing 92": "Racing 92",
+    "ASM Clermont": "Clermont",
+    "Stade Français Paris": "Paris",
+    "Stade Français Paris": "Paris",
+    "Union Bordeaux-Bègles": "Bordeaux",
+    "Union Bordeaux-Bègles": "Bordeaux",
+    "Stade Rochelais": "La Rochelle",
+    "RC Toulon": "Toulon",
+    "Castres Olympique": "Castres",
+    "LOU Rugby": "Lyon",
+    "Aviron Bayonnais": "Bayonne",
+    "USA Perpignan": "Perpignan",
+    "US Montauban": "Montauban",
+    "Brive": "Brive",
+    "Vannes": "Vannes",
+}
+
+_standings_cache: Optional[list] = None
+_standings_ts: float = 0
+_STANDINGS_TTL = 3600  # 1h
+
+
+def get_standings() -> list[dict]:
+    """Compute Top 14 standings from match history JSON."""
+    global _standings_cache, _standings_ts
+    now = time.time()
+    if _standings_cache is not None and now - _standings_ts < _STANDINGS_TTL:
+        return _standings_cache
+
+    history_path = DATA_DIR / "lnr_match_history.json"
+    if not history_path.exists():
+        return []
+
+    with open(history_path, encoding="utf-8") as f:
+        matches = json.load(f)
+
+    s: dict[str, dict] = defaultdict(lambda: {
+        "played": 0, "won": 0, "drawn": 0, "lost": 0,
+        "pts_for": 0, "pts_against": 0,
+        "tries_for": 0, "tries_against": 0,
+        "bonus_off": 0, "bonus_def": 0, "points": 0,
+    })
+
+    for m in matches:
+        players = m.get("players", [])
+        if not players:
+            continue
+        home_raw, away_raw = m.get("home_team", ""), m.get("away_team", "")
+        home = _TEAM_NAME_MAP.get(home_raw, home_raw)
+        away = _TEAM_NAME_MAP.get(away_raw, away_raw)
+
+        home_pts  = sum((p.get("points") or 0) for p in players if p.get("side") == "home")
+        away_pts  = sum((p.get("points") or 0) for p in players if p.get("side") == "away")
+        home_tries = sum((p.get("tries") or 0) for p in players if p.get("side") == "home")
+        away_tries = sum((p.get("tries") or 0) for p in players if p.get("side") == "away")
+
+        if home_pts == 0 and away_pts == 0:
+            continue
+
+        for team, own_pts, opp_pts, own_tries, opp_tries in [
+            (home, home_pts, away_pts, home_tries, away_tries),
+            (away, away_pts, home_pts, away_tries, home_tries),
+        ]:
+            t = s[team]
+            t["played"] += 1
+            t["pts_for"] += own_pts
+            t["pts_against"] += opp_pts
+            t["tries_for"] += own_tries
+            t["tries_against"] += opp_tries
+
+            if own_pts > opp_pts:
+                t["won"] += 1; t["points"] += 4
+            elif own_pts == opp_pts:
+                t["drawn"] += 1; t["points"] += 2
+            else:
+                t["lost"] += 1
+                if opp_pts - own_pts <= 5:
+                    t["bonus_def"] += 1; t["points"] += 1
+
+            if own_tries - opp_tries >= 3:
+                t["bonus_off"] += 1; t["points"] += 1
+
+    ranked = sorted(
+        [{"team": k, **v} for k, v in s.items()],
+        key=lambda x: (-x["points"], -(x["pts_for"] - x["pts_against"])),
+    )
+    for i, row in enumerate(ranked, 1):
+        row["lnr_rank"] = i
+
+    _standings_cache = ranked
+    _standings_ts = now
+    return ranked
+
+
+def get_standings_map() -> dict[str, dict]:
+    return {r["team"]: r for r in get_standings()}
 
 
 # ── Awards ────────────────────────────────────────────────────────────────────

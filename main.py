@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from data_loader import (
     get_df, get_seasons, row_to_summary, row_to_detail,
     rating_to_tier, safe_float, safe_int, safe_str, DEFAULT_SEASON, AVAILABLE_SEASONS,
-    get_player_badges,
+    get_player_badges, get_standings, get_standings_map,
 )
 from predictor import predict_match
 from ai_service import generate_commentary, generate_scout_summary
@@ -219,20 +219,42 @@ def teams(season: str = DEFAULT_SEASON):
     if df.empty:
         raise HTTPException(404, "Season not found")
 
+    standings_map = get_standings_map()
+
     result = []
     for team, group in df.groupby("team"):
         avg = float(group["rating"].mean())
+        st = standings_map.get(str(team), {})
         result.append({
             "team": team,
             "avg_rating": round(avg, 1),
             "tier": rating_to_tier(avg),
             "n_players": len(group),
-            "top_player": group.nlargest(1, "rating").iloc[0].get("name"),
+            "top_player": safe_str(group.nlargest(1, "rating").iloc[0].get("name")),
+            # LNR standings
+            "lnr_rank":     st.get("lnr_rank"),
+            "played":       st.get("played"),
+            "won":          st.get("won"),
+            "drawn":        st.get("drawn"),
+            "lost":         st.get("lost"),
+            "bonus_off":    st.get("bonus_off"),
+            "bonus_def":    st.get("bonus_def"),
+            "pts_for":      st.get("pts_for"),
+            "pts_against":  st.get("pts_against"),
+            "points":       st.get("points"),
         })
-    result.sort(key=lambda x: -x["avg_rating"])
+
+    # Sort by LNR rank first, fallback to avg_rating
+    result.sort(key=lambda x: (x["lnr_rank"] or 99, -x["avg_rating"]))
     for i, t in enumerate(result):
         t["rank"] = i + 1
     return result
+
+
+@app.get(f"{PREFIX}/standings")
+def standings():
+    """Full Top 14 standings computed from match history."""
+    return get_standings()
 
 
 @app.get(f"{PREFIX}/teams/{{team_name}}")

@@ -1,0 +1,39 @@
+name: Weekly LNR Data Update
+
+on:
+  schedule:
+    # Every Sunday at 22:00 UTC (23:00 CET / 00:00 CEST)
+    - cron: "0 22 * * 0"
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout API repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 pandas numpy lxml
+
+      - name: Run LNR scraper
+        run: python scripts/weekly_scraper.py
+        env:
+          SEASON: "2025-2026"
+
+      - name: Commit and push updated data
+        run: |
+          git config user.email "weekly-bot@rugby-analytics.app"
+          git config user.name "Weekly Data Bot"
+          git add data/
+          git diff --staged --quiet || git commit -m "Weekly update $(date +%Y-%m-%d): LNR stats refresh"
+          git push

@@ -345,6 +345,7 @@ def leaderboard(
             "form_trend":       safe_str(row.get("form_trend")) or "→",
             "confidence_badge": safe_str(row.get("confidence_badge")) or "Basse",
             "badges":           get_player_badges(lnr_slug, team, season_val),
+            "matches_played":   safe_int(row.get("matches_played")),
         })
     return result
 

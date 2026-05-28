@@ -1,4 +1,7 @@
 """Match prediction — reuses the logic from the Streamlit engine."""
+import json
+import time
+from pathlib import Path
 from typing import Optional
 import numpy as np
 import pandas as pd
@@ -69,3 +72,83 @@ def predict_match(df: pd.DataFrame, home: str, away: str) -> dict:
         "score_away": max(0, score_away),
         "key_matchups": matchups,
     }
+
+
+# Canonical name mapping (same as data_loader._TEAM_NAME_MAP)
+_LNR_TO_CANONICAL = {
+    "Stade Toulousain": "Toulouse",
+    "Section Paloise": "Pau",
+    "Montpellier Hérault Rugby": "Montpellier",
+    "Racing 92": "Racing 92",
+    "ASM Clermont": "Clermont",
+    "Stade Français Paris": "Paris",
+    "Union Bordeaux-Bègles": "Bordeaux",
+    "Stade Rochelais": "La Rochelle",
+    "RC Toulon": "Toulon",
+    "Castres Olympique": "Castres",
+    "LOU Rugby": "Lyon",
+    "Aviron Bayonnais": "Bayonne",
+    "USA Perpignan": "Perpignan",
+    "US Montauban": "Montauban",
+    "Brive": "Brive",
+    "Vannes": "Vannes",
+}
+
+_calibration_cache: Optional[dict] = None
+_calibration_ts: float = 0
+_CALIBRATION_TTL = 3600
+
+
+def compute_calibration(df: pd.DataFrame, history_path: Path) -> dict:
+    """Compute Brier score + accuracy on historical matches."""
+    global _calibration_cache, _calibration_ts
+    now = time.time()
+    if _calibration_cache is not None and now - _calibration_ts < _CALIBRATION_TTL:
+        return _calibration_cache
+
+    if not history_path.exists():
+        return {"brier_score": None, "accuracy": None, "n_matches": 0}
+
+    with open(history_path, encoding="utf-8") as f:
+        matches = json.load(f)
+
+    brier_sum = 0.0
+    correct = 0
+    n = 0
+
+    for m in matches:
+        players = m.get("players", [])
+        if not players:
+            continue
+        home_raw = m.get("home_team", "")
+        away_raw = m.get("away_team", "")
+        home = _LNR_TO_CANONICAL.get(home_raw, home_raw)
+        away = _LNR_TO_CANONICAL.get(away_raw, away_raw)
+
+        home_pts = sum((p.get("points") or 0) for p in players if p.get("side") == "home")
+        away_pts = sum((p.get("points") or 0) for p in players if p.get("side") == "away")
+        if home_pts == 0 and away_pts == 0:
+            continue
+
+        pred = predict_match(df, home, away)
+        if "error" in pred:
+            continue
+
+        p_home = pred["home_win_pct"] / 100.0
+        actual = 1 if home_pts > away_pts else 0
+        brier_sum += (p_home - actual) ** 2
+        if (p_home >= 0.5) == (actual == 1):
+            correct += 1
+        n += 1
+
+    if n == 0:
+        return {"brier_score": None, "accuracy": None, "n_matches": 0}
+
+    result = {
+        "brier_score": round(brier_sum / n, 4),
+        "accuracy": round(correct / n * 100, 1),
+        "n_matches": n,
+    }
+    _calibration_cache = result
+    _calibration_ts = now
+    return result

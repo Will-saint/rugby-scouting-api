@@ -13,9 +13,9 @@ from slowapi.errors import RateLimitExceeded
 from data_loader import (
     get_df, get_seasons, row_to_summary, row_to_detail,
     rating_to_tier, safe_float, safe_int, safe_str, DEFAULT_SEASON, AVAILABLE_SEASONS,
-    get_player_badges, get_standings, get_standings_map,
+    get_player_badges, get_standings, get_standings_map, DATA_DIR,
 )
-from predictor import predict_match
+from predictor import predict_match, compute_calibration
 from ai_service import generate_commentary, generate_scout_summary
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
@@ -500,3 +500,13 @@ def predict(body: PredictBody):
     if "error" in result:
         raise HTTPException(404, result["error"])
     return result
+
+
+@app.get(f"{PREFIX}/predict/calibration")
+def predict_calibration(season: str = DEFAULT_SEASON):
+    """Brier score + accuracy computed on all historical matches."""
+    df = get_df(season)
+    if df.empty:
+        raise HTTPException(404, "Season not found")
+    history_path = DATA_DIR / "lnr_match_history.json"
+    return compute_calibration(df, history_path)

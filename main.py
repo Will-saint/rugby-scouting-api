@@ -23,18 +23,9 @@ app = FastAPI(title="Rugby Analytics API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://*.vercel.app",
-]
-if os.environ.get("ALLOWED_ORIGIN"):
-    _ORIGINS.append(os.environ["ALLOWED_ORIGIN"])
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ORIGINS,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
